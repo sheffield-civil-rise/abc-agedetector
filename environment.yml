@@ -1,0 +1,21 @@
+name: age-detection-test
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - cudatoolkit=11.3.1
+  - jupyter=1.0.0
+  - matplotlib=3.5.1
+  - numpy=1.21.5
+  - pillow=9.0.1
+  - pip=21.2.4
+  - plotly=5.6.0
+  - python=3.10.4
+  - pytorch=1.11.0=py3.10_cuda11.3_cudnn8_0
+  - scikit-learn=1.0.2
+  - scipy=1.7.3
+  - six=1.16.0
+  - torchvision=0.12.0
+  - pip:
+    - kornia==0.6.4
+    - tensorboard==2.9.0
