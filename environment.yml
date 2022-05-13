@@ -1,4 +1,4 @@
-name: age-detection-test
+name: age-detection
 channels:
   - pytorch
   - defaults
