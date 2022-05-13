@@ -1,5 +1,11 @@
 ### ABC WP17 Age Detection Base Code
 
+#### Create environment
+`conda create env -f environment.yml`
+
+Assumes [CUDA 11.6](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html) and [cudnn libs](https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html) all installed, but these can be changed by manually installing libs as versioning not hugely important.
+
+
 #### Data folder format
 ```
 path/to/dataset
