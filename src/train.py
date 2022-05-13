@@ -166,7 +166,7 @@ def train_model(
             epoch_loss = running_loss / dataset_sizes[idx]
             epoch_acc  = running_corrects.double() / dataset_sizes[idx]
 
-            _log('STATUS', f'{phase}, Loss:{epoch_loss:.4f} Acc:{epoch_loss}')
+            _log('STATUS', f'{phase}, Loss:{epoch_loss:.4f} Acc:{epoch_acc}')
 
             # deep copy best model
             if phase == 'val' and epoch_acc > best_acc:
