@@ -18,6 +18,7 @@ _LOG_STATES = {'DEBUG': 0, 'VERBOSE': 1, 'STATUS': 2, 'QUIET': 3}
 global LOG_STATE
 LOG_STATE = _LOG_STATES['STATUS']
 
+
 def _log(level, text):
     ''' logging function '''
     global LOG_STATE
@@ -32,6 +33,19 @@ def _log(level, text):
         input('↵ to continue')
     else:
         print(text)
+
+
+def _setup_parallel_enviromment(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+
+    torch.distributed.init_process_group(
+        'nccl', rank=rank, world_size=world_size)
+
+
+def setup_parallel_environment():
+    # i don't know what i'm doing
+    NotImplemented
 
 
 def prepare_dataset_loader(args):
@@ -123,7 +137,9 @@ def train_model(
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
-    dataset_sizes = [len(dataloader.dataset) for dataloader in dataloaders]
+    dataset_sizes = [
+        r*len(dataloader.dataset)
+        for r, dataloader in zip((0.8, 0.2), dataloaders)]
 
     for epoch in range(num_epochs):
         _log('STATUS', f'Epoch {epoch}/{num_epochs - 1}')
@@ -163,9 +179,8 @@ def train_model(
             if phase == 'train' and scheduler is not None:
                 scheduler.step()  # update parameter tuning scheduler
 
-            # update stats
-            epoch_loss = running_loss / dataset_sizes[idx]
-            epoch_acc = running_corrects.double() / dataset_sizes[idx]
+            epoch_loss = running_loss/dataset_sizes[idx]
+            epoch_acc = running_corrects.double()/dataset_sizes[idx]
 
             _log('STATUS', f'{phase}, Loss:{epoch_loss:.4f} Acc:{epoch_acc}')
 
@@ -194,6 +209,19 @@ def main(args):
         _log('STATUS', f'Setting seed as {args.seed}')
         torch.manual_seed(args.seed)
 
+    if args.parallel:
+        _parallel_able = (
+            torch.cuda.is_available() and torch.cuda.device_count() > 1)
+        if not _parallel_able:
+            _log(
+                'STATUS',
+                'Unable to parallelise because nb devices less than 2')
+    else:
+        _parallel_able = False
+
+    if _parallel_able:
+        setup_parallel_environment()
+
     train_loader, test_loader = prepare_dataset_loader(args)
 
     nb_classes = len(train_loader.dataset.classes)
@@ -205,16 +233,9 @@ def main(args):
     _log('STATUS', f'Using device {device}')
     _log('DEBUG', 'Is this right ?')
 
-    if args.parallel:
-        _parallel_able = (
-            torch.cuda.is_available() and torch.cuda.device_count() > 1)
-        if _parallel_able:
-            _log('STATUS', 'Creating parallel model')
-            model = torch.nn.DataParallel(model)
-        else:
-            _log(
-                'STATUS',
-                'Unable to parallelise because nb devices less than 2')
+    if _parallel_able:
+        _log('STATUS', 'Creating parallel model')
+        model = torch.nn.parallel.DistributedDataParallel(model)
 
     # train code
     # ...
