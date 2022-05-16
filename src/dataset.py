@@ -50,9 +50,16 @@ def generate_dataset(
         if os.path.isdir(loader_dir):
             shutil.rmtree(loader_dir)
         if nattempts > 0:
-            return generate_dataset(path, reload=reload, masks=masks, nattempts=nattempts-1, is_valid_file=is_valid_file, transforms=transforms)
+            return generate_dataset(
+                path,
+                reload=reload,
+                masks=masks,
+                nattempts=nattempts-1,
+                is_valid_file=is_valid_file,
+                transforms=transforms)
         else:
-            print('tried and failed to create dataset {} times'.format(nattempts))
+            print(
+                'tried and failed to make dataset {} times'.format(nattempts))
             raise e
 
 
@@ -70,7 +77,8 @@ def get_train_test_samplers(nb_data, ratio=(80, 20), seed=None):
     np.random.shuffle(indices)
 
     split = int(np.floor(rate * nb_data))
-    train_idx, test_idx = indices[split:], indices[:split]
+
+    train_idx, test_idx = indices[:split], indices[split:]
 
     train_sampler = SubsetRandomSampler(indices=train_idx)
     test_sampler = SubsetRandomSampler(indices=test_idx)

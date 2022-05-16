@@ -138,8 +138,11 @@ def train_model(
     best_acc = 0.0
 
     dataset_sizes = [
-        r*len(dataloader.dataset)
-        for r, dataloader in zip((0.8, 0.2), dataloaders)]
+        len(dataloader.sampler.indices)
+        for dataloader in dataloaders]
+
+    _log('VERBOSE', f'Training on {dataset_sizes[0]} images')
+    _log('VERBOSE', f'Validating on {dataset_sizes[1]} images')
 
     for epoch in range(num_epochs):
         _log('STATUS', f'Epoch {epoch}/{num_epochs - 1}')
@@ -186,14 +189,16 @@ def train_model(
 
             # deep copy best model
             if phase == 'val' and epoch_acc > best_acc:
-                _log('VERBOSE',
+                _log(
+                    'VERBOSE',
                     f'Updating best weights (acc={epoch_acc}<{best_acc})')
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
         _log('STATUS', '')
     elapsed = time.time() - since
 
-    _log('STATUS',
+    _log(
+        'STATUS',
         f'Training complete in {elapsed // 60:.0f}m {elapsed % 60:.0f}s')
     _log('STATUS', f'Best val acc: {best_acc:4f}')
 
@@ -257,10 +262,10 @@ def main(args):
 
 def generate_parser():
     ''' Generates argument parser for commandline use '''
-    ## create parser object
+    # create parser object
     parser = argparse.ArgumentParser(
         description='Trains an age detection model')
-    ## add arguments
+    # add arguments
     parser.add_argument(
         'base_dir', type=str,
         help='directory containing images to train/test and class.json')
