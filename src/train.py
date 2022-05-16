@@ -38,7 +38,7 @@ def prepare_dataset_loader(args):
     ''' '''
     _log('VERBOSE', 'Generating dataset folders')
     transforms = DefaultTransformation(
-        args.nb_patches,args.patch_size,args.crop_size)
+        args.nb_patches, args.patch_size, args.crop_size)
 
     imagefolders = [generate_dataset(
         args.base_dir,
@@ -56,7 +56,8 @@ def prepare_dataset_loader(args):
     train_loader, test_loader = [DataLoader(
         imagefolder,
         batch_size=args.batch_size,
-        sampler=sampler) for imagefolder,sampler in zip(imagefolders,samplers)]
+        sampler=sampler)
+        for imagefolder, sampler in zip(imagefolders, samplers)]
 
     return train_loader, test_loader
 
@@ -67,7 +68,7 @@ def get_backbone(args):
     _log('VERBOSE', f'Using backbone {backbone}')
 
     return {
-        'resnet18': torchvision.models.resnet18 ,
+        'resnet18': torchvision.models.resnet18,
         'alexnet': torchvision.models.alexnet,
         'inception_v3': torchvision.models.inception_v3,
         'mobilenet_v2': torchvision.models.mobilenet_v2}[backbone]
@@ -80,9 +81,9 @@ def create_model(args, nb_classes):
     _log('VERBOSE', f'Creating model with {nb_classes} classes')
     model = AgeDetector(
         nb_classes,
-        backbone = backbone,
-        pretrained = args.pretrained_backbone,
-        fixbackbone = args.fix_backbone)
+        backbone=backbone,
+        pretrained=args.pretrained_backbone,
+        fixbackbone=args.fix_backbone)
 
     if args.pretrained:
         _log('VERBOSE', f'Loading pretrained weights from {args.weights}')
@@ -164,7 +165,7 @@ def train_model(
 
             # update stats
             epoch_loss = running_loss / dataset_sizes[idx]
-            epoch_acc  = running_corrects.double() / dataset_sizes[idx]
+            epoch_acc = running_corrects.double() / dataset_sizes[idx]
 
             _log('STATUS', f'{phase}, Loss:{epoch_loss:.4f} Acc:{epoch_acc}')
 
@@ -190,7 +191,7 @@ def main(args):
     ''' main body '''
 
     if args.seed is not None:
-        log()
+        _log('STATUS', f'Setting seed as {args.seed}')
         torch.manual_seed(args.seed)
 
     train_loader, test_loader = prepare_dataset_loader(args)
@@ -204,7 +205,18 @@ def main(args):
     _log('STATUS', f'Using device {device}')
     _log('DEBUG', 'Is this right ?')
 
-    ## train code
+    if args.parallel:
+        _parallel_able = (
+            torch.cuda.is_available() and torch.cuda.device_count() > 1)
+        if _parallel_able:
+            _log('STATUS', 'Creating parallel model')
+            model = torch.nn.DataParallel(model)
+        else:
+            _log(
+                'STATUS',
+                'Unable to parallelise because nb devices less than 2')
+
+    # train code
     # ...
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.003)
@@ -268,6 +280,9 @@ def generate_parser():
     parser.add_argument(
         '--cpu', action='store_true',
         help='force use of cpu')
+    parser.add_argument(
+        '--parallel', action='store_true',
+        help='use parallelisation on multiple gpu')
     parser.add_argument(
         '--debug', action='store_true',
         help='log state debug')
