@@ -6,7 +6,7 @@ import warnings
 class CustomModule(torch.nn.Module):
     """ This is a superclass for custom network classes """
     def __init__(self):
-        super(CustomNetwork, self).__init__()
+        super(CustomModule, self).__init__()
 
 
 class CombinePredictions(CustomModule):
@@ -25,17 +25,19 @@ class CombinePredictions(CustomModule):
 
 class BaseConvNet(CustomModule):
     """ Basic convolutional network for image classification """
-    def __init__(self, numclasses=7):
+    def __init__(self, numclasses=7, **kwargs):
         super(BaseConvNet, self).__init__()
         self._numclasses = numclasses
-        _generate_layers()
+        self._generate_layers()
 
     def _generate_layers(self):
         ''' create layers '''
+        self._convlayers()
+        self._fclayers()
 
     def _convlayers(self):
         _conv1 = torch.nn.Conv2d(3, 6, 5)
-        _pool  = torch.nn.MaxPool2d(2, 2)
+        _pool = torch.nn.MaxPool2d(2, 2)
         _conv2 = torch.nn.Conv2d(6, 16, 5)
 
         self.conv = torch.nn.Sequential(
@@ -65,7 +67,6 @@ class BaseConvNet(CustomModule):
         return x
 
 
-
 class AgeDetector(torch.nn.Module):
     def __init__(
         self,
@@ -91,14 +92,15 @@ class AgeDetector(torch.nn.Module):
                 'fix_backbone requested so enabling pretrained weights by default')
         self._backbone = backbone(
             pretrained=(self._pretrained or self._fixbackbone))
-        self._backbone_out_features = self._backbone.fc.in_features
+        if not isinstance(self._backbone, CustomModule):
+            self._backbone_out_features = self._backbone.fc.in_features
         if self._fixbackbone:
             for param in self._backbone.parameters():
                 param.requires_grad = False
 
     def _generate_outlayer(self):
         ''' creates output layer for classification '''
-        if not isinstance(self.backbone, CustomModule):
+        if not isinstance(self._backbone, CustomModule):
             self._backbone.fc = torch.nn.Linear(
                 self._backbone_out_features, self._numclasses)
 
