@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from utils import is_valid_file
 from dataset import generate_dataset, get_train_test_samplers
 from transforms import DefaultTransformation
-from model import AgeDetector
+from model import AgeDetector, BaseConvNet
 
 
 _LOG_STATES = {'DEBUG': 0, 'VERBOSE': 1, 'STATUS': 2, 'QUIET': 3}
@@ -82,6 +82,7 @@ def get_backbone(args):
     _log('VERBOSE', f'Using backbone {backbone}')
 
     return {
+        'default': BaseConvNet, # i wrote this
         'resnet18': torchvision.models.resnet18,
         'alexnet': torchvision.models.alexnet,
         'inception_v3': torchvision.models.inception_v3,
@@ -242,6 +243,14 @@ def main(args):
         _log('STATUS', 'Creating parallel model')
         model = torch.nn.parallel.DistributedDataParallel(model)
 
+    # count parameters
+    num_parameter = sum([p.numel() for p in model.parameters()])
+    num_trainable = sum(
+        [p.numel() for p in model.parameters() if p.requires_grad])
+    _log(
+        'VERBOSE',
+        f'There are {num_parameter} parameters, of which {num_trainable} are trainable')
+
     # train code
     # ...
     criterion = torch.nn.CrossEntropyLoss()
@@ -249,15 +258,18 @@ def main(args):
     scheduler = None
     # scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
-    model = train_model(
-        model, criterion,
-        optimizer, scheduler,
-        (train_loader, test_loader),
-        device,
-        num_epochs=args.nb_epochs)
+    if not args.notrain
+        model = train_model(
+            model, criterion,
+            optimizer, scheduler,
+            (train_loader, test_loader),
+            device,
+            num_epochs=args.nb_epochs)
 
-    # save weights
-    save_weights(model, args)
+        # save weights
+        save_weights(model, args)
+    else:
+        _log('DEBUG', 'Stopping because I was asked not to train the model')
 
 
 def generate_parser():
@@ -295,7 +307,8 @@ def generate_parser():
         help='path to weights for using pretrained network')
     parser.add_argument(
         '--backbone', type=str, default='resnet18',
-        choices=['resnet18', 'alexnet', 'inception_v3', 'mobilenet_v2'],
+        choices=[
+            'default', 'resnet18', 'alexnet', 'inception_v3', 'mobilenet_v2'],
         help='choice of backbone neural network')
     parser.add_argument(
         '--pretrained_backbone', action='store_true',
@@ -315,6 +328,9 @@ def generate_parser():
     parser.add_argument(
         '--verbose', action='store_true',
         help='log state verbose')
+    parser.add_argument(
+        '--notrain', action='store_true',
+        help='prevent model training (for debugging)')
     parser.add_argument(
         '--quiet', action='store_true',
         help='log state quiet')
