@@ -3,6 +3,8 @@ import os
 import time
 import copy
 
+import tqdm  # progress bar
+
 import torch
 import torchvision
 from torch.utils.data import DataLoader
@@ -159,27 +161,35 @@ def train_model(
             running_loss, running_corrects = 0.0, 0
 
             # iterate over data
-            for inputs, labels in dataloaders[idx]:
-                inputs = inputs.to(device)  # move to gpu/cpu
-                labels = labels.to(device)  # move to gpu/cpu
+            with tqdm.tqdm(dataloaders[idx], unit='batch') as tepoch:
+                for inputs, labels in tepoch:
+                    tepoch.set_description(['train', '  val'][idx])
 
-                # reset optimizer gradients
-                optimizer.zero_grad()
+                    inputs = inputs.to(device)  # move to gpu/cpu
+                    labels = labels.to(device)  # move to gpu/cpu
 
-                # forward pass
-                with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(inputs)           # class probabilities
-                    _, preds = torch.max(outputs, 1)  # class guess
-                    loss = criterion(outputs, labels)
+                    # reset optimizer gradients
+                    optimizer.zero_grad()
 
-                    # backpass / optimize for train
-                    if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
+                    # forward pass
+                    with torch.set_grad_enabled(phase == 'train'):
+                        outputs = model(inputs)           # class probabilities
+                        _, preds = torch.max(outputs, 1)  # class guess
+                        loss = criterion(outputs, labels)
 
-                # get stats
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                        # backpass / optimize for train
+                        if phase == 'train':
+                            loss.backward()
+                            optimizer.step()
+
+                    # get stats
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
+                    # print stats
+                    _ploss = running_loss/dataset_sizes[idx]
+                    _paccu = 100*running_corrects.item()/dataset_sizes[idx]
+                    tepoch.set_postfix(loss=_ploss, accuracy=_paccu)
+                    time.sleep(0.1)
             if phase == 'train' and scheduler is not None:
                 scheduler.step()  # update parameter tuning scheduler
 

@@ -19,3 +19,4 @@ dependencies:
   - pip:
     - kornia==0.6.4
     - tensorboard==2.9.0
+    - tqdm==4.64.0
