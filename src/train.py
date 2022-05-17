@@ -258,7 +258,7 @@ def main(args):
     scheduler = None
     # scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
-    if not args.notrain
+    if not args.notrain:
         model = train_model(
             model, criterion,
             optimizer, scheduler,
