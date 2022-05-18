@@ -1,5 +1,9 @@
+# unused atm
 cache/*
+# data storage, weights, etc
 tmp/*
+# tensorboard cache
+runs/*
 
 ## All default python below
 

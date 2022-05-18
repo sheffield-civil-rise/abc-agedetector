@@ -15,7 +15,7 @@ class DefaultTransformation:
         self._transform = T.Compose([
             T.CenterCrop((self.crop_size, self.crop_size)),
             T.ToTensor(),
-            ExtractPatchUnfold(self.nb_patches, self.patch_size),
+            ExtractPatchUnfold(self.nb_patches, self.patch_size)],
             T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
 
     def __call__(self, x):

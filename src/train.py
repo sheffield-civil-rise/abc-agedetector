@@ -1,5 +1,6 @@
 import argparse
 import os
+import datetime
 import time
 import copy
 
@@ -8,6 +9,7 @@ import tqdm  # progress bar
 import torch
 import torchvision
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import is_valid_file
 from dataset import generate_dataset, get_train_test_samplers
@@ -117,8 +119,9 @@ def save_weights(model, args):
     _log('VERBOSE', 'Extracting state dictionary')
     model.eval()
     state_dict = model.state_dict()
-    _log('STATUS', f'Saving weights at {args.out_path}')
-    torch.save(state_dict, args.out_path)
+    _outname = os.path.join(args.out_path, args.run_name + '_weights.pt')
+    _log('STATUS', f'Saving weights at {_outname}')
+    torch.save(state_dict, _outname)
 
 
 def train_model(
@@ -128,10 +131,17 @@ def train_model(
     scheduler,
     dataloaders,
     device,
-    num_epochs=25):
+    num_epochs=25,
+    tensorboard=None):
     ''' training sequence '''
 
     since = time.time()
+
+    if tensorboard is not None:
+        writer = tensorboard
+        tensorboard = True
+    else:
+        tensorboard = False
 
     _log('VERBOSE', f'Moving model to device:{device}')
     # load model to device
@@ -147,8 +157,10 @@ def train_model(
     _log('VERBOSE', f'Training on {dataset_sizes[0]} images')
     _log('VERBOSE', f'Validating on {dataset_sizes[1]} images')
 
+    _writer_epoch = 0
+
     for epoch in range(num_epochs):
-        _log('STATUS', f'Epoch {epoch}/{num_epochs - 1}')
+        _log('STATUS', f'Epoch {epoch+1}/{num_epochs}')
         _log('STATUS', '-'*10)
 
         ##
@@ -182,14 +194,28 @@ def train_model(
                             loss.backward()
                             optimizer.step()
 
+                        if tensorboard and (_writer_epoch % 10 == 0):
+                            writer.add_scalar(
+                                f"loss/{phase}",
+                                loss,
+                                _writer_epoch)
+                            writer.add_scalar(
+                                f"acc/{phase}",
+                                torch.sum(preds == labels.data) / labels.size(0),
+                                _writer_epoch)
+
                     # get stats
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += torch.sum(preds == labels.data)
                     # print stats
-                    _ploss = running_loss/dataset_sizes[idx]
-                    _paccu = 100*running_corrects.item()/dataset_sizes[idx]
+                    _ploss = loss.item()
+                    _paccu = 100*torch.sum(preds==labels.data).item()/labels.size(0)
                     tepoch.set_postfix(loss=_ploss, accuracy=_paccu)
+
                     time.sleep(0.1)
+                    if tensorboard:
+                        writer.flush()
+                    _writer_epoch += 1
             if phase == 'train' and scheduler is not None:
                 scheduler.step()  # update parameter tuning scheduler
 
@@ -218,6 +244,41 @@ def train_model(
     return model
 
 
+def initialise_tensorboard_writer(run_name):
+    ''' create tensorboard writer object '''
+    if not os.path.isdir('runs'):
+        os.mkdir('runs')
+    _outdir = os.path.join('runs', run_name)
+
+    _log('STATUS', 'Writing status to tensorboard')
+    _log(
+        'VERBOSE',
+        f'To view, run >tensorboard --logdir={_outdir}')
+
+    writer = SummaryWriter(os.path.join('runs',run_name))
+    return writer
+
+
+def generate_run_name(args):
+    ''' creates a (unique?) name for the run to save model weights to
+
+        also uses this name for tensorboard run
+    '''
+    np = args.nb_patches
+    bsz = args.batch_size
+    psz = args.patch_size
+    csz = args.crop_size
+    backbone = args.backbone
+
+    timenow = datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')
+
+    namestr = 'model_{}_np{}_bsz{}_psz{}_csz{}_{}'.format(
+        timenow, np, bsz, psz, csz, backbone)
+
+    _log('DEBUG', 'Using namestr {}'.format(namestr))
+    args.run_name = namestr
+
+
 def main(args):
     ''' main body '''
 
@@ -225,7 +286,11 @@ def main(args):
         _log('STATUS', f'Setting seed as {args.seed}')
         torch.manual_seed(args.seed)
 
-    if args.parallel:
+    generate_run_name(args)
+    if args.tensorboard:
+        writer = initialise_tensorboard_writer(args.run_name)
+
+    if args.parallel:  # this doesn't work
         _parallel_able = (
             torch.cuda.is_available() and torch.cuda.device_count() > 1)
         if not _parallel_able:
@@ -240,9 +305,23 @@ def main(args):
 
     train_loader, test_loader = prepare_dataset_loader(args)
 
+    _log(
+        'DEBUG',
+        'bsz{}=={}=={} ?'.format(
+            args.batch_size,
+            *[obj.size(0) for obj in next(iter(train_loader))]))
+
     nb_classes = len(train_loader.dataset.classes)
 
     model = create_model(args, nb_classes)
+
+    if args.tensorboard:
+        images, labels = next(iter(train_loader))
+        _log('DEBUG', 'Patch grid {}'.format(images.size()))
+        grid = torchvision.utils.make_grid(images[0,...])
+        writer.add_image('images', grid, 0)
+        writer.add_graph(model, images)
+
 
     # generate device
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
@@ -274,13 +353,16 @@ def main(args):
             optimizer, scheduler,
             (train_loader, test_loader),
             device,
-            num_epochs=args.nb_epochs)
-
+            num_epochs=args.nb_epochs,
+            tensorboard=writer if args.tensorboard else None)
+        if args.tensorboard:
+            writer.flush()
         # save weights
         save_weights(model, args)
     else:
         _log('DEBUG', 'Stopping because I was asked not to train the model')
-
+    if args.tensorboard:
+        writer.close()
 
 def generate_parser():
     ''' Generates argument parser for commandline use '''
@@ -293,7 +375,7 @@ def generate_parser():
         help='directory containing images to train/test and class.json')
     parser.add_argument(
         'out_path', type=str,
-        help='path to save model weights to')
+        help='folder to save model weights to')
     parser.add_argument(
         '-e', '--nb_epochs', type=int, default=25,
         help='number of epochs for training')
@@ -342,6 +424,9 @@ def generate_parser():
         '--notrain', action='store_true',
         help='prevent model training (for debugging)')
     parser.add_argument(
+        '--tensorboard', action='store_true',
+        help='use tensorboard logging')
+    parser.add_argument(
         '--quiet', action='store_true',
         help='log state quiet')
 
@@ -353,6 +438,8 @@ def validate_args(args):
 
     if not os.path.isdir(args.base_dir):
         raise FileNotFoundError(f'cannot find directory at {args.base_dir}')
+    if not os.path.isdir(args.out_path):
+        os.makedirs(args.out_path)
     if args.weights is not None:
         if not os.path.isfile(args.weights):
             raise FileNotFoundError(
