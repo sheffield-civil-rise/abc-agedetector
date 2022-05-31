@@ -7,7 +7,27 @@ import shutil
 import numpy as np
 
 from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision.datasets import ImageFolder
+from torchvision.datasets import DatasetFolder, ImageFolder
+
+
+class PredictFolder(ImageFolder):
+    ''' overrides dataset folder '''
+    def find_classes(self, directory):
+        return (['none'], {'none': 0})
+
+    def make_dataset(self,
+            directory, class_to_idx, extensions, is_valid_file=lambda _: True):
+        ''' Generates a list of samples of a form (path_to_sample, class) '''
+        _out = []
+        for path in os.listdir(directory):
+            if is_valid_file(path):
+                _out.append((os.path.join(directory, path), 0))
+        return _out
+
+    def __getitem__(self, index):
+        ''' overrides get item '''
+        images, _ = super().__getitem__(index)
+        return (images, self.samples[index][0])
 
 
 def _generate_dataset(
@@ -61,6 +81,18 @@ def generate_dataset(
             print(
                 'tried and failed to make dataset {} times'.format(nattempts))
             raise e
+
+
+def generate_predict_dataset(
+    path,
+    is_valid_file=lambda _: True,
+    transforms=None):
+    ''' generate prediction folder '''
+    return PredictFolder(
+        root=path,
+        is_valid_file=is_valid_file,
+        transform=transforms)
+
 
 
 def get_train_test_samplers(nb_data, ratio=(80, 20), seed=None):
